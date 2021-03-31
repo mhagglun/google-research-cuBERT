@@ -109,7 +109,7 @@ def input_fn_builder(examples, seq_length, tokenizer):
 
     def generator():
         # Open json, read item by item and yield results
-        with open('./preprocessed.csv', "r") as csvfile:
+        with open('./data/preprocessed.csv', "r") as csvfile:
             reader = csv.DictReader(csvfile, fieldnames=[
                 'unique_ids', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
             next(reader)
@@ -140,7 +140,7 @@ def input_fn_builder(examples, seq_length, tokenizer):
     return input_fn
 
 
-def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
+def model_fn_builder(bert_config, init_checkpoint, layer_indices, use_tpu,
                      use_one_hot_embeddings):
     """Returns `model_fn` closure for TPUEstimator."""
 
@@ -192,7 +192,7 @@ def model_fn_builder(bert_config, init_checkpoint, layer_indexes, use_tpu,
             "unique_id": unique_ids,
         }
 
-        for (i, layer_index) in enumerate(layer_indexes):
+        for (i, layer_index) in enumerate(layer_indices):
             predictions["layer_output_%d" % i] = all_layers[layer_index]
 
         output_spec = tf.contrib.tpu.TPUEstimatorSpec(
@@ -221,7 +221,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 
 def read_samples(directory):
     examples = []
-    with open('./preprocessed.csv', "r") as csvfile:
+    with open('./data/preprocessed.csv', "r") as csvfile:
         reader = csv.DictReader(csvfile, fieldnames=[
             'unique_ids', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
         next(reader)
@@ -238,7 +238,7 @@ def read_samples(directory):
 def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
 
-    layer_indexes = [int(x) for x in FLAGS.layers.split(",")]
+    layer_indices = [int(x) for x in FLAGS.layers.split(",")]
 
     bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
@@ -261,7 +261,7 @@ def main(_):
     model_fn = model_fn_builder(
         bert_config=bert_config,
         init_checkpoint=FLAGS.init_checkpoint,
-        layer_indexes=layer_indexes,
+        layer_indices=layer_indices,
         use_tpu=FLAGS.use_tpu,
         use_one_hot_embeddings=FLAGS.use_one_hot_embeddings)
 
@@ -276,22 +276,26 @@ def main(_):
     input_fn = input_fn_builder(
         examples=examples, seq_length=FLAGS.max_seq_length, tokenizer=tokenizer)
 
-    with jsonlines.open(FLAGS.output_file, mode='w') as writer:
+    with open(FLAGS.output_file, mode='w') as writer:
         for result in tqdm(estimator.predict(input_fn, yield_single_examples=True), desc="Extracting Features", total=len(examples)):
             unique_id = int(result["unique_id"])
             feature = unique_id_to_feature[unique_id]
-            output_json = collections.OrderedDict()
+            output_json = {}
             output_json["unique_id"] = unique_id
             output_json["method_name"] = feature['method_name']
 
-            feats = np.zeros((bert_config.hidden_size,))
-            for (i, token) in enumerate(feature['tokens']):
-                for (j, layer_index) in enumerate(layer_indexes):
-                    layer_output = result["layer_output_%d" % j]
-                    feats += layer_output[i:(i+1)].flat
-            feats /= len(feature['tokens'])
-            output_json["features"] = list(feats)
-            writer.write(json.dumps(output_json))
+            # feats = {}
+            # # Get the features for the CLS token from each layer
+            # for (j, layer_index) in enumerate(layer_indices):
+            #     layer_output = result["layer_output_%d" % j]
+            #     feature = layer_output[0:1]     # CLS token is the first one for each input method
+            #     feats["layer_output_%d" % j] = feature
+
+            layer_output = result["layer_output_0"]
+            features = layer_output[0:1].tolist()[0]
+            # output_json["features"] = features.tolist()[0]
+            # writer.write(json.dumps(output_json))
+            writer.write(json.dumps({"unique_id": unique_id, "method_name": feature['method_name'], "features": features}) + "\n")
 
 
 if __name__ == "__main__":
