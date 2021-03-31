@@ -1,6 +1,7 @@
 # CuBERT
 
-This is my adaptation of the code in![google-research/cubert](https://github.com/google-research/google-research/tree/master/cubert) used for the extraction of features from input source code.
+This is my slightly modified version of cuBERT from [google-research](https://github.com/google-research/google-research) which I use for feature extraction of python source code.
+All credit belongs to [google-research/cubert](https://github.com/google-research/google-research/tree/master/cubert)
 
 ## Update 2020/11/16: Pre-trained Java Model with Code Comments
 
