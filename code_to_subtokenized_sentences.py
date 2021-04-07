@@ -107,12 +107,14 @@ def code_to_cubert_sentences(
     # Now we have to encode tokens using the subword text encoder, expanding the
     # sentences.
     subtokenized_sentences = []  # type: List[List[Text]]
+    token_ids = []
     for sentence in sentences:
         encoded_tokens = [subword_tokenizer.encode_without_tokenizing(t)
                           for t in sentence]  # type: List[List[int]]
         logging.vlog(5, 'Sentence encoded into >>>%s<<<.', encoded_tokens)
         flattened_encodings = sum(encoded_tokens, [])  # type: List[int]
         logging.vlog(5, 'Flattened into >>>%s<<<.', flattened_encodings)
+        token_ids.append(flattened_encodings)
         decoded_tokens = subword_tokenizer.decode_list(
             flattened_encodings)  # type: List[Text]
         logging.vlog(5, 'Sentence re-decoded into >>>%s<<<.', decoded_tokens)
@@ -121,4 +123,4 @@ def code_to_cubert_sentences(
     logging.vlog(5, 'Sentences are further subtokenized: >>>%s<<<.',
                  subtokenized_sentences)
 
-    return subtokenized_sentences
+    return subtokenized_sentences, token_ids

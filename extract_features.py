@@ -109,19 +109,19 @@ def input_fn_builder(examples, seq_length, tokenizer):
 
     def generator():
         # Open json, read item by item and yield results
-        with open('./data/preprocessed.csv', "r") as csvfile:
+        with open(FLAGS.input_file, "r") as csvfile:
             reader = csv.DictReader(csvfile, fieldnames=[
-                'unique_ids', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
+                'unique_ids', 'filepath', 'label', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
             next(reader)
             for row in reader:
+                label = row['label']
                 method_name = row['method_name']
                 input_ids = ast.literal_eval(row['input_ids'])
                 input_mask = ast.literal_eval(row['input_mask'])
                 input_type_ids = ast.literal_eval(
                     row['input_type_ids'])
-                features = {"unique_ids": int(row['unique_ids']), "method_name": method_name,
-                            "input_ids": input_ids, "input_mask": input_mask,
-                            "input_type_ids": input_type_ids}
+                features = {"unique_ids": int(row['unique_ids']), "label": label, "method_name": method_name,
+                            "input_ids": input_ids, "input_mask": input_mask, "input_type_ids": input_type_ids}
                 yield(features)
 
     def input_fn(params):
@@ -131,9 +131,8 @@ def input_fn_builder(examples, seq_length, tokenizer):
         # This is for demo purposes and does NOT scale to large data sets. We do
         # not use Dataset.from_generator() because that uses tf.py_func which is
         # not TPU compatible. The right way to load data is with TFRecordReader.
-        d = tf.data.Dataset.from_generator(generator, output_types={"unique_ids": tf.int32, "method_name": tf.string, "input_ids": tf.int32, "input_mask": tf.int32, "input_type_ids": tf.int32},
-                                           output_shapes={"unique_ids": tf.TensorShape([]), "method_name": tf.TensorShape([]), "input_ids": tf.TensorShape([seq_length]), "input_mask": tf.TensorShape([seq_length]), "input_type_ids": tf.TensorShape([seq_length])})
-        # d = d.map(extract_features_from_sample)
+        d = tf.data.Dataset.from_generator(generator, output_types={"unique_ids": tf.int32, "label": tf.string, "method_name": tf.string, "input_ids": tf.int32, "input_mask": tf.int32, "input_type_ids": tf.int32},
+                                           output_shapes={"unique_ids": tf.TensorShape([]), "label": tf.TensorShape([]), "method_name": tf.TensorShape([]), "input_ids": tf.TensorShape([seq_length]), "input_mask": tf.TensorShape([seq_length]), "input_type_ids": tf.TensorShape([seq_length])})
         d = d.batch(batch_size=batch_size, drop_remainder=False)
         return d
 
@@ -221,15 +220,17 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 
 def read_samples(directory):
     examples = []
-    with open('./data/preprocessed.csv', "r") as csvfile:
+    with open(FLAGS.input_file, "r") as csvfile:
         reader = csv.DictReader(csvfile, fieldnames=[
-            'unique_ids', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
+            'unique_ids', 'filepath', 'label', 'method_name', 'tokens', 'input_ids', 'input_mask', 'input_type_ids'])
         next(reader)
         for row in tqdm(reader, desc="Reading data"):
             method_name = row['method_name']
+            label = row['label']
+            filepath = row['filepath']
             tokens = ast.literal_eval(row['tokens'])
-            features = {"unique_id": int(row['unique_ids']), "method_name": method_name,
-                        "tokens": tokens}
+            features = {"unique_id": int(row['unique_ids']), "label": label,
+                        "method_name": method_name, "filepath": filepath, "tokens": tokens}
             examples.append(features)
         csvfile.close()
     return examples
@@ -280,22 +281,11 @@ def main(_):
         for result in tqdm(estimator.predict(input_fn, yield_single_examples=True), desc="Extracting Features", total=len(examples)):
             unique_id = int(result["unique_id"])
             feature = unique_id_to_feature[unique_id]
-            output_json = {}
-            output_json["unique_id"] = unique_id
-            output_json["method_name"] = feature['method_name']
 
-            # feats = {}
-            # # Get the features for the CLS token from each layer
-            # for (j, layer_index) in enumerate(layer_indices):
-            #     layer_output = result["layer_output_%d" % j]
-            #     feature = layer_output[0:1]     # CLS token is the first one for each input method
-            #     feats["layer_output_%d" % j] = feature
-
+            # Only get the features for the [CLS] token of the chosen layer
             layer_output = result["layer_output_0"]
             features = layer_output[0:1].tolist()[0]
-            # output_json["features"] = features.tolist()[0]
-            # writer.write(json.dumps(output_json))
-            writer.write(json.dumps({"unique_id": unique_id, "method_name": feature['method_name'], "features": features}) + "\n")
+            writer.write(json.dumps({"unique_id": unique_id, "filepath": feature['filepath'], "label": feature['label'], "method_name": feature['method_name'], "features": features}) + "\n")
 
 
 if __name__ == "__main__":

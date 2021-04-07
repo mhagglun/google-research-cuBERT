@@ -59,7 +59,7 @@ def main(argv):
         # print('#' * 80)
         # print(code)
 
-    subtokenized_sentences = (
+    subtokenized_sentences, _ = (
         code_to_subtokenized_sentences.code_to_cubert_sentences(
             code=code,
             initial_tokenizer=tokenizer,
